@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Calculateur multi-tests VMA — Dark</title>
+<style>
+  :root{
+    --bg:#0f1115;
+    --panel:#111827;
+    --panel-2:#0b1220;
+    --text:#e5e7eb;
+    --muted:#94a3b8;
+    --accent:#60a5fa;
+    --accent-2:#22c55e;
+    --danger:#ef4444;
+    --ring:#1f2937;
+    --cell:#0e1626;
+    --cell-alt:#0c1321;
+    --row-dim:0.25;
+    --radius-btn:2px;
+    --radius-card:16px;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family:'Segoe UI','Futura',system-ui,-apple-system,Arial,sans-serif;
+    background: radial-gradient(1200px 600px at 20% -10%, #152235 0%, #0f1115 55%) fixed;
+    color:var(--text);
+  }
+  .hidden{ display:none !important; }
+
+  /* Layout */
+  .container{
+    max-width:1200px; margin:0 auto; padding:16px;
+    display:grid; gap:16px; grid-template-columns:1fr;
+  }
+  @media(min-width:900px){
+    .container{ grid-template-columns:360px 1fr; align-items:start; }
+  }
+  body.is-running .container{ grid-template-columns:1fr !important; }
+  body.is-running .table-card{ grid-column:1 / -1; }
+
+  /* Chrono */
+  .chrono-card{
+    grid-column:1 / -1; background:linear-gradient(180deg,#0d1726 0%,#0b1422 100%);
+    border:1px solid #1f2a44; border-radius:var(--radius-card);
+    box-shadow:var(--shadow); padding:14px 16px; position:sticky; top:0; z-index:5; backdrop-filter:blur(6px);
+  }
+  .chrono{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .chrono-time{
+    font-variant-numeric:tabular-nums; letter-spacing:1px; font-weight:800; line-height:1;
+    font-size:clamp(48px,7vw,96px); color:#d1d5db; text-shadow:0 0 24px rgba(96,165,250,.18); margin:0;
+  }
+  .btns{ display:flex; gap:8px; flex-wrap:wrap; }
+  .btn{
+    appearance:none; border:none; border-radius:var(--radius-btn);
+    padding:12px 20px; font-weight:700; color:#0b1020; background:#334155; cursor:pointer;
+    transition:transform .06s ease, filter .2s ease, background .2s ease, box-shadow .2s ease;
+    box-shadow: inset 0 -2px 0 rgba(255,255,255,.06), 0 6px 14px rgba(0,0,0,.3);
+  }
+  .btn:active{ transform:translateY(1px) } .btn:hover{ filter:brightness(1.05) }
+  .btn.start{ background:var(--accent-2) } .btn.stop{ background:var(--danger); color:#fff } .btn.reset{ background:#93c5fd }
+  .btn.neutral{ background:#64748b; color:#0b1020 }
+
+  /* Réglages */
+  .card{ background:var(--panel); border:1px solid #1f2937; border-radius:var(--radius-card); box-shadow:var(--shadow); padding:16px; }
+  .card h2{ margin:0 0 12px 0; font-size:18px; color:#cbd5e1; }
+  .grid-2{ display:grid; grid-template-columns:1fr; gap:12px; }
+  @media(min-width:520px){ .grid-2{ grid-template-columns:1fr 1fr; } }
+  .field{ display:flex; flex-direction:column; gap:8px; }
+  label{ font-size:12px; color:var(--muted); font-weight:700; letter-spacing:.3px; text-transform:uppercase; }
+  input[type="number"], select{
+    width:100%; background:#0c1323; color:#e5e7eb; border:1px solid #1f2a44; border-radius:10px;
+    padding:24px 20px; font-weight:800; font-size:1.1rem; line-height:1.1; /* select un peu moins grand */
+  }
+  select{ padding:16px 16px; font-weight:800; }
+  .proto-note{ font-size:12px; color:#94a3b8; margin-top:4px; }
+
+  .update-wrap{ margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+
+  /* Tableau */
+  .table-card{ background:var(--panel); border:1px solid #1f2937; border-radius:var(--radius-card); box-shadow:var(--shadow); padding:0; overflow:hidden; }
+  .table-toolbar{ position:relative; padding:10px; display:flex; align-items:center; gap:8px; background:linear-gradient(180deg,var(--panel-2),rgba(10,12,20,.4)); border-bottom:1px solid #1f2937; }
+  .table-toolbar .left{ position:absolute; left:10px; top:10px; display:flex; gap:6px; }
+  .table-toolbar .title{ width:100%; text-align:center; font-weight:800; letter-spacing:.3px; color:#cbd5e1; }
+  .toggle{ padding:8px 12px; border-radius:var(--radius-btn); background:#0c1323; color:#e5e7eb; border:1px solid #25324d; font-weight:700; cursor:pointer; }
+  .toggle[aria-pressed="true"]{ background:var(--accent); color:#081225; border-color:#2b83f6; }
+
+  .wrapper{ width:100%; max-height:70vh; overflow:auto; }
+  table{ width:max-content; border-collapse:separate; border-spacing:0; font-size:13px; }
+  thead th{ position:sticky; top:0; z-index:2; background:var(--panel-2); color:#cdd6e6; border-bottom:1px solid #22304b!important; }
+  th,td{ border-right:1px solid #1f2937; border-bottom:1px solid #1f2937; padding:8px 10px; text-align:center; white-space:nowrap; }
+  tbody tr:nth-child(even) td{ background:var(--cell-alt) }
+  tbody tr:nth-child(odd)  td{ background:var(--cell) }
+  td.meta{ position:sticky; left:0; z-index:1; background:#0e1526 }
+  td.meta.speed{ position:sticky; left:80px; z-index:1; background:#0f1629 }
+  th:first-child{ position:sticky; left:0; z-index:3 } th:nth-child(2){ position:sticky; left:80px; z-index:3 }
+  td,th{ min-width:80px } th:nth-child(2), td.meta.speed{ min-width:120px }
+
+  .highlight{
+    color:#fff !important;
+    background:linear-gradient(180deg,rgba(239,68,68,.95),rgba(185,28,28,.95)) !important;
+    box-shadow: inset 0 -2px 0 rgba(255,255,255,.18);
+  }
+  .next-up{ outline:2px solid var(--accent); outline-offset:-2px; position:relative; z-index:1; }
+
+  /* Focus tableau (mode Tout) */
+  .wrapper.mode-focus tbody tr{ opacity:var(--row-dim); filter:saturate(.9) blur(0.3px); }
+  .wrapper.mode-focus tbody tr.active-row{ opacity:1; filter:none; }
+
+  /* HUD Focus */
+  .focus-hud{
+    display:none; padding:18px; background:var(--panel); border:1px solid #1f2937;
+    border-radius:var(--radius-card); box-shadow:var(--shadow);
+  }
+  .focus-hud .row{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  .focus-hud .stat{ background:#0c1323; border:1px solid #1f2a44; border-radius:12px; padding:14px; }
+  .focus-hud .label{ text-transform:uppercase; font-size:12px; letter-spacing:.3px; color:#94a3b8; font-weight:800; margin-bottom:6px; }
+  .focus-hud .value{ font-size: clamp(28px, 5vw, 48px); font-weight:800; line-height:1; }
+  .focus-hud .value.small{ font-size: clamp(22px, 4.5vw, 36px); }
+  .focus-hud .past{ background:linear-gradient(180deg, rgba(239,68,68,.25), rgba(185,28,28,.18)); }
+
+  /* Visibilité selon mode */
+  .table-zone.show-table{ display:block; }
+  .table-zone.hide-table{ display:none; }
+  .focus-zone.show-hud{ display:block; }
+  .focus-zone.hide-hud{ display:none; }
+
+  /* Résultats */
+  .results{
+    margin-top:12px; padding:14px; background:#0c1323; border:1px solid #1f2a44; border-radius:12px;
+    display:none;
+  }
+  .results.show{ display:block; }
+  .results h3{ margin:0 0 8px 0; font-size:24px; color:#dbeafe; }
+  .results p{ margin:4px 0; color:#cbd5e1; font-size:18px; }
+
+  .legend{ margin-top:10px; font-size:12px; color:#94a3b8; text-align:center; }
+
+  @media (prefers-reduced-motion: reduce){ .btn,.toggle{ transition:none } }
+
+  /* -------- Soft Pulse -------- */
+  @keyframes pulseRow {
+    0%   { background-color: rgba(96,165,250,0.18); }
+    60%  { background-color: rgba(96,165,250,0.08); }
+    100% { background-color: initial; }
+  }
+  @keyframes pulseHud {
+    0%   { box-shadow: 0 0 0 0 rgba(96,165,250,0.30); }
+    60%  { box-shadow: 0 0 0 14px rgba(96,165,250,0.08); }
+    100% { box-shadow: 0 0 0 0 rgba(96,165,250,0.00); }
+  }
+  .pulse-row td{ animation: pulseRow 900ms ease-out; }
+  .pulse-hud{ animation: pulseHud 900ms ease-out; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <!-- CHRONO -->
+    <section class="chrono-card" aria-label="Chronomètre">
+      <div class="chrono">
+        <h1 id="chronometre" class="chrono-time" aria-live="polite">00:00</h1>
+        <div class="btns">
+          <button class="btn start" id="startBtn">Start</button>
+          <button class="btn stop"  id="stopBtn">Stop</button>
+          <button class="btn reset" id="resetBtn">Reset</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RÉGLAGES + PROTOCOLES -->
+    <section id="settingsCard" class="card" aria-label="Réglages du calculateur">
+      <h2>Test VMA - Protocoles & réglages</h2>
+
+      <div class="field" style="margin-bottom:8px">
+        <label for="protocole">Choisir un protocole</label>
+        <select id="protocole">
+          <option value="leger" selected>Luc Léger (20 m)</option>
+          <option value="vameval">VAMEVAL (50 m)</option>
+          <option value="univ20">Universitaire 20 m (+1 km/h / 120 s)</option>
+          <option value="custom" >Personnalisé</option>
+        </select>
+        <div id="protoNote" class="proto-note">Réglez librement les paramètres ci-dessous ou choisissez un protocole.</div>
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="vitesseInitiale">Vitesse initiale (En km/h)</label>
+          <input type="number" id="vitesseInitiale" value="8" step="0.1" />
+        </div>
+        <div class="field">
+          <label for="incrementVitesse">Incrémentation des paliers (km/h)</label>
+          <input type="number" id="incrementVitesse" value="0.5" step="0.1" />
+        </div>
+        <div class="field">
+          <label for="dureePalier">Durée d’un palier (secondes)</label>
+          <input type="number" id="dureePalier" value="60" step="5" />
+        </div>
+        <div class="field">
+          <label for="distanceCone">Distance entre repères (m)</label>
+          <input type="number" id="distanceCone" value="20" step="5" />
+        </div>
+      </div>
+
+      <div class="update-wrap">
+        <button class="btn neutral" id="updateBtn">Mettre à jour les paramètres</button>
+      </div>
+      <p class="legend">Bip numérique à chaque temps de passage. Start masque les réglages, Stop les ré-affiche.</p>
+
+      <div id="resultsCard" class="results" aria-live="polite">
+        <h3>Résultats</h3>
+        <p id="resProto">Protocole : —</p>
+        <p id="resVMA">VMA : — km/h</p>
+        <p id="resVO2">VO₂max : — ml/kg/min (— L/min)</p>
+      </div>
+    </section>
+
+    <!-- AFFICHAGE -->
+    <section class="table-card" aria-label="Affichage">
+      <div class="table-toolbar">
+        <div class="left">
+          <button class="toggle" id="focusBtn" aria-pressed="true"  title="Afficher le HUD Focus">Focus</button>
+          <button class="toggle" id="fullBtn"  aria-pressed="false" title="Afficher le tableau complet">Tout</button>
+        </div>
+        <div class="title">Temps de passage par palier</div>
+      </div>
+
+      <!-- HUD Focus -->
+      <div id="focusHud" class="focus-hud focus-zone show-hud" aria-live="polite">
+        <div class="row" style="margin-bottom:16px">
+          <div class="stat">
+            <div class="label">Palier</div>
+            <div id="hudPalier" class="value">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Vitesse (km/h)</div>
+            <div id="hudVitesse" class="value">—</div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="stat past">
+            <div class="label">Dernier Temps</div>
+            <div id="hudPast" class="value small">00:00</div>
+          </div>
+          <div class="stat" style="outline:2px solid var(--accent); outline-offset:-4px;">
+            <div class="label">Temps suivant</div>
+            <div id="hudNext" class="value small">—:—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tableau -->
+      <div id="tableWrapper" class="wrapper table-zone hide-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Palier</th>
+              <th>Vitesse (km/h)</th>
+              <th>Temps</th>
+            </tr>
+          </thead>
+          <tbody id="resultatsTable"></tbody>
+        </table>
+      </div>
+
+
+    </section>
+  </div>
+
+<script>
+  // -------------------- État global --------------------
+  let timer = null;
+  let elapsedTime = 0;
+  let running = false;
+  let currentCell = null;           // dernière case passée (null au départ)
+  let lastPalier = null;            // pour soft pulse
+  const state = { protocolKey: 'custom' };
+
+  const chronometreEl = document.getElementById('chronometre');
+  const tableWrapper  = document.getElementById('tableWrapper');
+  const resultatsBody = document.getElementById('resultatsTable');
+  const settingsCard  = document.getElementById('settingsCard');
+  const focusHud      = document.getElementById('focusHud');
+
+  // HUD refs
+  const hudPalier  = document.getElementById('hudPalier');
+  const hudVitesse = document.getElementById('hudVitesse');
+  const hudPast    = document.getElementById('hudPast');
+  const hudNext    = document.getElementById('hudNext');
+
+  // Results refs
+  const resultsCard = document.getElementById('resultsCard');
+  const resProto = document.getElementById('resProto');
+  const resVMA   = document.getElementById('resVMA');
+  const resVO2   = document.getElementById('resVO2');
+
+  // Inputs
+  const selProto = document.getElementById('protocole');
+  const protoNote = document.getElementById('protoNote');
+  const inpV0 = document.getElementById('vitesseInitiale');
+  const inpInc = document.getElementById('incrementVitesse');
+  const inpDur = document.getElementById('dureePalier');
+  const inpDist = document.getElementById('distanceCone');
+
+  // -------------------- Protocoles --------------------
+  const PROTOS = {
+    leger:  { name:'Luc Léger (20 m)', note:'Paliers d’1 min, +0,5 km/h, repères 20 m.', v0:8, inc:0.5, dur:60, dist:20 },
+    vameval:{ name:'VAMEVAL (50 m)',   note:'Paliers d’1 min, +0,5 km/h, repères 50 m.', v0:8, inc:0.5, dur:60, dist:50 },
+    univ20: { name:'Universitaire 20 m', note:'Paliers de 120 s, +1 km/h, repères 20 m.', v0:8, inc:1.0, dur:120, dist:20 },
+    custom: { name:'Personnalisé', note:'Réglez librement les paramètres.', v0:10, inc:1, dur:120, dist:25 }
+  };
+
+  function applyProtocol(key){
+    const p = PROTOS[key] || PROTOS.custom;
+    state.protocolKey = key;
+    protoNote.textContent = p.note;
+    inpV0.value = p.v0;
+    inpInc.value = p.inc;
+    inpDur.value = p.dur;
+    inpDist.value = p.dist;
+    calculerTemps();
+    updateFocusHud();
+  }
+
+  selProto.addEventListener('change', (e)=> applyProtocol(e.target.value));
+
+  // -------------------- Web Audio (bip numérique) --------------------
+  let audioCtx = null;
+  function ensureAudioContext(){
+    if(!audioCtx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
+    if(audioCtx.state === 'suspended'){
+      audioCtx.resume().catch(()=>{});
+    }
+  }
+  function playBeep(freq=1000, durationMs=120, volume=0.22, type='sine'){
+    try{
+      ensureAudioContext();
+      const t0 = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t0);
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(volume, t0 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + durationMs/1000);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + durationMs/1000 + 0.02);
+    }catch(e){}
+  }
+
+  // -------------------- Utilitaires --------------------
+  const fmt = (t) => {
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  };
+
+  function scrollCellIntoCenter(cell){
+    if(!cell) return;
+    const parent = tableWrapper;
+    const parentRect = parent.getBoundingClientRect();
+    const cellRect   = cell.getBoundingClientRect();
+    const offsetLeft = (cellRect.left - parentRect.left) + parent.scrollLeft;
+    const offsetTop  = (cellRect.top  - parentRect.top ) + parent.scrollTop;
+    const targetLeft = offsetLeft - (parent.clientWidth  / 2) + (cell.clientWidth  / 2);
+    const targetTop  = offsetTop  - (parent.clientHeight / 2) + (cell.clientHeight / 2);
+    parent.scrollTo({ left: Math.max(0, targetLeft), top: Math.max(0, targetTop), behavior: 'smooth' });
+  }
+
+  function clearHighlights(){
+    document.querySelectorAll('td.highlight').forEach(td=>td.classList.remove('highlight'));
+    document.querySelectorAll('td.next-up').forEach(td=>td.classList.remove('next-up'));
+    document.querySelectorAll('tbody tr.active-row').forEach(tr=>tr.classList.remove('active-row'));
+  }
+
+  // ----- Affichage Focus vs Tout -----
+  function setViewMode(mode){
+    const focusBtn = document.getElementById('focusBtn');
+    const fullBtn  = document.getElementById('fullBtn');
+    const isFocus = (mode === 'focus');
+
+    focusBtn.setAttribute('aria-pressed', String(isFocus));
+    fullBtn.setAttribute('aria-pressed', String(!isFocus));
+
+    if(isFocus){
+      focusHud.classList.remove('hide-hud'); focusHud.classList.add('show-hud');
+      tableWrapper.classList.remove('show-table'); tableWrapper.classList.add('hide-table');
+    }else{
+      tableWrapper.classList.remove('hide-table'); tableWrapper.classList.add('show-table');
+      focusHud.classList.remove('show-hud'); focusHud.classList.add('hide-hud');
+      tableWrapper.classList.add('mode-focus');
+      applyFocusRow();
+    }
+  }
+
+  // ----- Adaptation ligne en mode "Tout" -----
+  function applyFocusRow(){
+    const tableVisible = !tableWrapper.classList.contains('hide-table');
+    if(!tableVisible) return;
+
+    document.querySelectorAll('tbody tr.active-row').forEach(tr=>tr.classList.remove('active-row'));
+
+    let preferredCell = resultatsBody.querySelector('td.next-up') || currentCell || resultatsBody.querySelector('td.time-cell');
+    if(!preferredCell) return;
+
+    const tr = preferredCell.closest('tr');
+    if(tr){
+      tr.classList.add('active-row');
+      scrollCellIntoCenter(preferredCell);
+    }
+  }
+
+  // Prochaine cellule
+  function getNextCell(cell){
+    if(!cell) return null;
+    let next = cell.nextElementSibling;
+    while(next && !next.classList.contains('time-cell')){ next = next.nextElementSibling; }
+    if(next && next.classList.contains('time-cell')) return next;
+    const rowEl = cell.parentElement.nextElementSibling;
+    if(!rowEl) return null;
+    return rowEl.querySelector('td.time-cell') || null;
+  }
+  function markNextUpFrom(cell){
+    document.querySelectorAll('td.next-up').forEach(td=>td.classList.remove('next-up'));
+    const nxt = getNextCell(cell);
+    if(nxt){ nxt.classList.add('next-up'); }
+  }
+
+  // ------- HUD Focus -------
+  function updateFocusHud(){
+    const firstCell = resultatsBody.querySelector('td.time-cell');
+
+    let palierText = '—', vitesseText = '—', pastText = '00:00', nextText = '—:—';
+
+    if(currentCell){
+      const tr = currentCell.closest('tr');
+      if(tr){
+        palierText  = tr.children[0]?.textContent.trim() || '—';
+        vitesseText = tr.children[1]?.textContent.trim() || '—';
+      }
+      pastText = currentCell.textContent.trim();
+      const nxt = getNextCell(currentCell);
+      if(nxt) nextText = nxt.textContent.trim();
+    }else if(firstCell){
+      const tr = firstCell.closest('tr');
+      palierText  = tr?.children[0]?.textContent.trim() || '—';
+      vitesseText = tr?.children[1]?.textContent.trim() || '—';
+      nextText = firstCell.textContent.trim();
+      document.querySelectorAll('td.next-up').forEach(td=>td.classList.remove('next-up'));
+      firstCell.classList.add('next-up');
+    }
+
+    hudPalier.textContent  = palierText;
+    hudVitesse.textContent = vitesseText;
+    hudPast.textContent    = pastText;
+    hudNext.textContent    = nextText;
+  }
+
+  // ------- Soft Pulse au changement de palier -------
+  function triggerPalierPulse(tr){
+    focusHud.classList.remove('pulse-hud'); void focusHud.offsetWidth; focusHud.classList.add('pulse-hud');
+    if(tr && !tableWrapper.classList.contains('hide-table')){
+      tr.classList.remove('pulse-row'); void tr.offsetWidth; tr.classList.add('pulse-row');
+    }
+  }
+
+  // -------------------- Chronomètre --------------------
+  function startChrono(){
+    if(running) return;
+    resultsCard.classList.remove('show'); // cacher anciens résultats
+    calculerTemps();                      // recalcule selon réglages
+    settingsCard.classList.add('hidden');
+    document.body.classList.add('is-running');
+    ensureAudioContext();
+
+    running = true;
+    timer = setInterval(()=>{
+      elapsedTime++;
+      chronometreEl.textContent = fmt(elapsedTime);
+      verifierTemps(elapsedTime);
+    }, 1000);
+
+    setViewMode('focus');        // HUD par défaut
+    updateFocusHud();
+  }
+
+  function stopChrono(){
+    running = false;
+    clearInterval(timer);
+    settingsCard.classList.remove('hidden');
+    document.body.classList.remove('is-running');
+
+    // ---- Calcul VMA & VO2 à l'arrêt ----
+    // Déterminer vitesse de ligne + crédit partiel
+    // 1) si aucune case passée -> VMA = vitesse de la 1ère ligne (0% du palier)
+    const firstCell = resultatsBody.querySelector('td.time-cell');
+    if(!firstCell){
+      return;
+    }
+
+    let tr = null;
+    let speedLine = 0;
+    let inc = parseFloat(inpInc.value);
+    let vma = 0;
+
+    if(currentCell){
+      tr = currentCell.closest('tr');
+      speedLine = parseFloat(tr.children[1].textContent);
+      const col = parseInt(currentCell.dataset.col, 10);
+      const total = tr.querySelectorAll('td.time-cell').length;
+      const fraction = total > 0 ? (col / total) : 0;
+      vma = speedLine + inc * fraction;
+    }else{
+      tr = firstCell.closest('tr');
+      speedLine = parseFloat(tr.children[1].textContent);
+      vma = speedLine; // départ : 0% du premier palier
+    }
+
+    // VO2 estimée
+    const vo2 = vma * 3.5; // ml/kg/min
+
+    // Afficher résultats
+    resProto.textContent = `Protocole : ${PROTOS[state.protocolKey]?.name || 'Personnalisé'}`;
+    resVMA.textContent   = `VMA : ${vma.toFixed(1)} km/h`;
+
+    const poids = parseFloat(prompt("Entrez le poids du sujet en kg pour le calcul de la VO2max (optionnel):", "70"));
+    if(!isNaN(poids) && poids > 0){
+      const vo2Abs = (vo2 * poids)/1000; // L/min
+      resVO2.textContent = `VO₂max : ${vo2.toFixed(1)} ml/kg/min (${vo2Abs.toFixed(2)} L/min)`;
+    } else {
+      resVO2.textContent = `VO₂max : ${vo2.toFixed(1)} ml/kg/min (— L/min)`;
+    }
+    resultsCard.classList.add('show');
+  }
+
+  function resetChrono(){
+    if(running) stopChrono();
+    elapsedTime = 0;
+    chronometreEl.textContent = '00:00';
+    clearHighlights();
+    currentCell = null;
+    lastPalier = null;
+    resultsCard.classList.remove('show');
+    updateFocusHud();
+  }
+
+  // -------------------- Calcul & Tableau --------------------
+  function calculerTemps(){
+    const vitesseInitiale = parseFloat(inpV0.value);
+    const incrementVitesse = parseFloat(inpInc.value);
+    const dureePalier = parseFloat(inpDur.value);
+    const distanceCone = parseFloat(inpDist.value);
+
+    let html = '';
+    let tempsTotal = 0;
+    let vitesse = vitesseInitiale;
+    let palier = 1;
+
+    while (vitesse <= 25){ // borne haute raisonnable, ajustable
+      const vitesseMs = vitesse * 1000 / 3600;
+      const tempsParSegment = distanceCone / vitesseMs; // s
+      const nbPassages = Math.max(1, Math.floor(dureePalier / tempsParSegment));
+
+      let rowCells = '';
+      for(let passage = 1; passage <= nbPassages; passage++){
+        tempsTotal += tempsParSegment;
+        const t = Math.floor(tempsTotal);
+        const m = Math.floor(t / 60);
+        const s = t % 60;
+        const label = `${m}:${String(s).padStart(2,'0')}`;
+        rowCells += `<td class="time-cell" data-time="${t}" data-row="${palier}" data-col="${passage}">${label}</td>`;
+      }
+
+      html += `
+        <tr>
+          <td class="meta">${palier}</td>
+          <td class="meta speed">${vitesse.toFixed(1)}</td>
+          ${rowCells}
+        </tr>
+      `;
+      vitesse += incrementVitesse;
+      palier++;
+    }
+
+    resultatsBody.innerHTML = html;
+
+    // État départ
+    currentCell = null;
+    lastPalier = null;
+    clearHighlights();
+    const firstCell = resultatsBody.querySelector('td.time-cell');
+    if(firstCell){ firstCell.classList.add('next-up'); }
+
+    applyFocusRow();
+    updateFocusHud();
+  }
+
+  function verifierTemps(temps){
+    const matches = resultatsBody.querySelectorAll(`td.time-cell[data-time="${temps}"]:not(.highlight)`);
+    if(matches.length){
+      matches.forEach(cell => cell.classList.add('highlight'));
+      currentCell = matches[matches.length - 1];
+
+      playBeep(1000, 120, 0.22, 'sine');
+
+      // Détecter changement de palier
+      const tr = currentCell.closest('tr');
+      const palierNow = tr ? parseInt(tr.children[0].textContent, 10) : null;
+      if(palierNow && palierNow !== lastPalier){
+        triggerPalierPulse(tr);
+        lastPalier = palierNow;
+      }
+
+      // Next-up + adaptation ligne/scroll
+      markNextUpFrom(currentCell);
+      applyFocusRow();
+      updateFocusHud();
+    }else{
+      updateFocusHud();
+      applyFocusRow();
+    }
+  }
+
+  // -------------------- Écouteurs UI --------------------
+  document.getElementById('startBtn').addEventListener('click', startChrono);
+  document.getElementById('stopBtn').addEventListener('click',  stopChrono);
+  document.getElementById('resetBtn').addEventListener('click', resetChrono);
+  document.getElementById('updateBtn').addEventListener('click', ()=>{
+    calculerTemps();
+    updateFocusHud();
+  });
+
+  document.getElementById('focusBtn').addEventListener('click', ()=> setViewMode('focus'));
+  document.getElementById('fullBtn').addEventListener('click',  ()=> {
+    setViewMode('full');
+    applyFocusRow();
+  });
+
+  // Initialisation (défaut: personnalisé courant)
+  calculerTemps();
+  setViewMode('focus');
+  window.addEventListener('keydown', (e)=>{
+    if(e.code === 'Space'){
+      e.preventDefault();
+      ensureAudioContext();
+      running ? stopChrono() : startChrono();
+    }
+  });
+</script>
+</body>
+</html>
